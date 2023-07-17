@@ -168,6 +168,7 @@ class MainWindow(QMainWindow):
         showSpectrum.clicked.connect(self.showSpectrum)
         leftBarLayout.addWidget(self.hoveredPoint)
         leftBarLayout.addWidget(self.statSelectY)
+        leftBarLayout.addWidget(QWidget())
         leftBarLayout.addWidget(clearRoi)
         leftBarLayout.addWidget(setRoi)
         leftBarLayout.addWidget(showSpectrum)
@@ -390,16 +391,15 @@ class MainWindow(QMainWindow):
     #Returns an array of stats of a given type
     def getArrayOfStats(self, index : int):
         arr = []
-        match index:
-            case 0:
-                for stat in self.stats:
-                    arr.append(float(stat.fractionBound))
-            case 1:
-                for stat in self.stats:
-                    arr.append(float(stat.cumulativeMedian))
-            case _:
-                for stat in self.stats:
-                    arr.append(stat.processedStats.loc[self.keys[index-2]])
+        if (index == 0):
+            for stat in self.stats:
+                arr.append(float(stat.fractionBound))
+        elif (index == 1):
+            for stat in self.stats:
+                arr.append(float(stat.cumulativeMedian))
+        else:
+            for stat in self.stats:
+                arr.append(stat.processedStats.loc[self.keys[index-2]])
         return arr
     
     #Generates and sets the cell-level pictures
@@ -425,11 +425,8 @@ class MainWindow(QMainWindow):
         
         for i in range(1,3):
             cellPicture = QPixmap()
-            match i:
-                case 1:
-                    subfolder = "/snaps3/"
-                case 2:
-                    subfolder = "/snaps4/"
+            subfolders = ["/snaps3/", "/snaps4/"]
+            subfolder = subfolders[i-1]
             cellPicture.load(self.targetFolder + subfolder + targetNum)
             cellPicture = cellPicture.scaled(QSize(200, 200), Qt.KeepAspectRatio)
             self.cellDisplay[i].setPixmap(cellPicture)
@@ -606,18 +603,17 @@ class ImageWindow(QWidget):
     #Reloads image based on selected graph
     def index_changed(self, index):
          self.image = QPixmap()
-         match index:
-             case 1:
-                 if (self.loadedTemporalPlot):
-                     self.loadedTemporalPlot = False
-                 else:
-                     self.parent.loadTemporalPlot()
-                     return
-                 self.image.load("assignment_probabilities_by_frame.png")
-                 self.image = self.image.scaled(QSize(900, 600), Qt.KeepAspectRatioByExpanding)
-             case 2:
-                 self.image.load("diffusion_spectra.png")
-                 self.image = self.image.scaled(QSize(900, 600), Qt.KeepAspectRatioByExpanding)
+         if (index == 1):
+             if (self.loadedTemporalPlot):
+                 self.loadedTemporalPlot = False
+             else:
+                 self.parent.loadTemporalPlot()
+                 return
+             self.image.load("assignment_probabilities_by_frame.png")
+             self.image = self.image.scaled(QSize(900, 600), Qt.KeepAspectRatioByExpanding)
+         elif (index == 2):
+            self.image.load("diffusion_spectra.png")
+            self.image = self.image.scaled(QSize(900, 600), Qt.KeepAspectRatioByExpanding)
          self.imageDisplay.setPixmap(self.image)
          
     #Saves image to folder
