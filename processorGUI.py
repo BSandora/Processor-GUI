@@ -12,6 +12,8 @@ import pyqtgraph as pg
 from saspt.io import load_detections
 from saspt import StateArrayDataset
 from saspt import StateArray
+from os import path
+from PIL import Image
 
 
 import sys
@@ -38,6 +40,7 @@ class MainWindow(QMainWindow):
         #Keys corresponding to processed stats
         self.keys = ['n_tracks', 'n_jumps', 'n_detections', 'mean_track_length', 'max_track_length', 'mean_jumps_per_track', 'mean_detections_per_frame', 'max_detections_per_frame', 'fraction_of_frames_with_detections']
         self.polyPaths = []
+        self.slashKey = self.findSlashKey()
         
         #File Uploading Interface
         self.fileWidget = self.initUploadInterface()
@@ -73,16 +76,21 @@ class MainWindow(QMainWindow):
         widget.setLayout(self.layout)
         self.setCentralWidget(widget)
         
+        
+    #Determines the correct 'slash' or file separator on the given os    
+    def findSlashKey(self):
+        return path.join('a', 'dir')[1]
+        
     #Initialized the interface for uploading files
     def initUploadInterface(self):
         fileLayout = QVBoxLayout()
         uploadBarLayout = QHBoxLayout()
         fileButton = QPushButton("Upload Files")
         fileButton.clicked.connect(self.uploadFiles)
-        fileButton.setFixedSize(QSize(85,50))
+        fileButton.setFixedSize(QSize(100,50))
         uploadPickleButton = QPushButton("Upload Pickle")
         uploadPickleButton.clicked.connect(self.uploadPickle)
-        uploadPickleButton.setFixedSize(QSize(85,50))
+        uploadPickleButton.setFixedSize(QSize(100,50))
         uploadBarLayout.addWidget(fileButton)
         uploadBarLayout.addWidget(uploadPickleButton)
         uploadBarWidget = QWidget()
@@ -97,27 +105,40 @@ class MainWindow(QMainWindow):
     
     #Initialize the interface for inputting dataset parameters
     def initParamInterface(self):
-        paramLayout = QGridLayout()
+        self.paramLayout = QGridLayout()
         paramLabels = self.getParamLabels()
         for i in range(len(paramLabels)):
-            paramLayout.addWidget(paramLabels[i], i, 0)
+            self.paramLayout.addWidget(paramLabels[i], i, 0)
             #Dummy widgets to clamp QLineEdits
-            paramLayout.addWidget(QWidget(), i, 2)
+            self.paramLayout.addWidget(QWidget(), i, 2)
+        helpButton = QPushButton("?")
+        helpButton.clicked.connect(self.showParamHelp)
+        self.paramLayout.addWidget(helpButton, 0, 1)
         self.paramInputs = self.getParamInputs()
         inputPos = (1, 2, 3, 5, 6, 7, 8, 9, 11, 12)
         for i in range(len(self.paramInputs)):
-            paramLayout.addWidget(self.paramInputs[i], inputPos[i], 1)
+            self.paramLayout.addWidget(self.paramInputs[i], inputPos[i], 1)
         self.progressCheck = QCheckBox()
         self.progressCheck.setChecked(True)
-        paramLayout.addWidget(self.progressCheck, 10, 1)
+        self.paramLayout.addWidget(self.progressCheck, 10, 1)
         submitParams = QPushButton("Submit Settings")
         submitParams.clicked.connect(self.confirmSettings)
         self.paramConf = QLabel()
-        paramLayout.addWidget(submitParams, 14, 0)
-        paramLayout.addWidget(self.paramConf, 15, 0)
+        self.paramLayout.addWidget(submitParams, 14, 0)
+        self.paramLayout.addWidget(self.paramConf, 15, 0)
         paramWidget = QWidget()
-        paramWidget.setLayout(paramLayout)
+        paramWidget.setLayout(self.paramLayout)
         return paramWidget
+    
+    #Shows clarifying information for parameters
+    def showParamHelp(self):
+        info = ["", " Length of one edge of a square pixel in micrometers", "The length from one frame to the next in seconds", 
+                "The axial detection range of the microscope in micrometers", "", "Treat trajectories with more jumps than this variable as separate trajectories",
+                "Ignore trajectories that start before this frame number", "Maximum number of trajectories to feed into the inference routine",
+                "Maximum number of inference iterations to perform", "Strength of the prior; Lower values here will make your output more sensitive to variations in your trajectories, and will make plots look less smeary",
+                "Shows progress", "Number of processor threads to use for computation", "Analysis Model"]
+        for i in range(len(info)):
+            self.paramLayout.addWidget(QLabel(info[i]), i, 2)
     
     #Initialize the display for relevant statistics
     def initStatDisplay(self):
@@ -235,7 +256,7 @@ class MainWindow(QMainWindow):
         
     # Accepts a .pickle file and loads it into a dataset
     def uploadPickle(self):
-        fileNames, _filter = QFileDialog.getOpenFileName(self, "Select Files", ".", "Pickle Files (*.pickle)")
+        fileNames, _filter = QFileDialog.getOpenFileName(self, "Select Files", ".", "Pickle Files (*.pickle, *.pkl)")
         with open(fileNames, 'rb') as f:
             self.dataset = pickle.load(f)
         self.fileNames = self.dataset.paths['filepath']
@@ -281,8 +302,13 @@ class MainWindow(QMainWindow):
     def initGUI(self):    
         self.mpo = []
         self.stats = []
-        self.targetFolder = '/'.join(re.split('/', self.fileNames[0])[:-2])
-        self.rois = self.loadRois()
+        for i in range(len(self.fileNames)):
+            self.fileNames[i] = self.fileNames[i].replace("/",self.slashKey)
+        self.targetFolder = path.split(path.split(self.fileNames[0])[0])[0]
+        try:
+            self.rois = self.loadRois()
+        except:
+            self.rois = None
         progress = 0
         for file in self.fileNames:
             self.mpo.append(self.dataset.calc_marginal_posterior_occs(file))
@@ -308,7 +334,7 @@ class MainWindow(QMainWindow):
     def getShortNames(self, fileNames):
         shortNames = []
         for file in fileNames:
-            shortNames.append(re.split('/', file)[-1])
+            shortNames.append(path.split(file)[1])
         return shortNames
     
     #Given a list of short file names, returns the numbers corresponding to each file
@@ -320,7 +346,7 @@ class MainWindow(QMainWindow):
     
     #Reads all rois into an array
     def loadRois(self):
-        roisFile = self.targetFolder + "/rois.txt"
+        roisFile = path.join(self.targetFolder, "rois.txt")
         rois = []
         with open(roisFile, 'r') as fd:
             reader = csv.reader(fd)
@@ -410,42 +436,46 @@ class MainWindow(QMainWindow):
         cellFig.add_subplot(cellAx)
         cellAx.set_yticks([])
         cellAx.set_xticks([])
-        image = plt.imread(self.targetFolder + "/snaps2/" + targetNum + ".tif")
+        image = Image.open(path.join(self.targetFolder, "snaps2", targetNum + ".tif"))
         cellAx.imshow(image)
         cellAx.add_patch(plt.Rectangle(xy=(self.rois[int(targetNum)-1][0], self.rois[int(targetNum)-1][1]),
                                       width=self.rois[int(targetNum)-1][2] - self.rois[int(targetNum)-1][0],
                                       height=self.rois[int(targetNum)-1][3] - self.rois[int(targetNum)-1][1],
                                       color='r', fill=False))
-        plt.savefig("annotated_cell.svg", dpi=1400, bbox_inches='tight', pad_inches=0)
+        plt.savefig("annotated_cell.tif", dpi=1400, bbox_inches='tight', pad_inches=0)
         plt.close()
         cellPicture = QPixmap()
-        cellPicture.load("annotated_cell.svg")
+        cellPicture.load("annotated_cell.tif")
         cellPicture = cellPicture.scaled(QSize(200, 200), Qt.KeepAspectRatio)
         self.cellDisplay[0].setPixmap(cellPicture)
         
         for i in range(1,3):
             cellPicture = QPixmap()
-            subfolders = ["/snaps3/", "/snaps4/"]
+            subfolders = ["snaps3", "snaps4"]
             subfolder = subfolders[i-1]
-            cellPicture.load(self.targetFolder + subfolder + targetNum)
+            cellPicture.load(path.join(self.targetFolder, subfolder, targetNum))
             cellPicture = cellPicture.scaled(QSize(200, 200), Qt.KeepAspectRatio)
             self.cellDisplay[i].setPixmap(cellPicture)
     
     #Updates display based on selected image
     def updateDisplay(self):
-        self.setPicture()
+        try:
+            self.setPicture()
+        except:
+            self.cellDisplay[0].setText("Images Not Present or Inaccessible")
         self.graphDiffusionSpectrum()
         graph = QPixmap()
         graph.load("diffusion_spectrum.png")
         graph = graph.scaled(QSize(600, 300), Qt.KeepAspectRatio)
         self.singleGraph.setPixmap(graph)
         self.fractionBound.setText("Fraction Bound (Probability of diffusion coefficient < 0.1): " + str(self.stats[self.selectedFile].fractionBound))
-        self.cumulativeMedian.setText("Cumulative Median: " + str(self.stats[self.selectedFile].cumulativeMedian))
+        self.cumulativeMedian.setText("Median Diffusion Coefficient: " + str(self.stats[self.selectedFile].cumulativeMedian))
         self.updateStatTracks()
-        self.meanIntensity.setText("Mean Pixel Intensity of Target Area: " + str(self.stats[self.selectedFile].meanIntensity))
-        self.totalIntensity.setText("Total Pixel Intensity of Target Area: " + str(self.stats[self.selectedFile].totalIntensity))
-        self.altMeanIntensity.setText("Mean Pixel Intensity of Target Area (Alternate View): " + str(self.stats[self.selectedFile].altMeanIntensity))
-        self.altTotalIntensity.setText("Total Pixel Intensity of Target Area (Alternate View): " + str(self.stats[self.selectedFile].altTotalIntensity))
+        if self.rois is not None:    
+            self.meanIntensity.setText("Mean Pixel Intensity of Target Area: " + str(self.stats[self.selectedFile].meanIntensity))
+            self.totalIntensity.setText("Total Pixel Intensity of Target Area: " + str(self.stats[self.selectedFile].totalIntensity))
+            self.altMeanIntensity.setText("Mean Pixel Intensity of Target Area (Alternate View): " + str(self.stats[self.selectedFile].altMeanIntensity))
+            self.altTotalIntensity.setText("Total Pixel Intensity of Target Area (Alternate View): " + str(self.stats[self.selectedFile].altTotalIntensity))
         if (self.imageWidget.imageSelect.currentIndex() == 1):
             self.loadTemporalPlot()
     
@@ -486,7 +516,7 @@ class MainWindow(QMainWindow):
     # Returns a select box that allows choice between given statistics
     def getStatSelect(self) -> QComboBox:
         select = QComboBox()
-        select.addItems(['Fraction Bound', 'Cumulative Median'])
+        select.addItems(['Fraction Bound', 'Median Diffusion Coefficient'])
         select.addItems(self.keys)
         select.currentIndexChanged.connect(self.stat_changed)
         return select
@@ -710,10 +740,14 @@ class Stats():
     def __init__(self, mpo, dataset, targetFolder, targetNum, rois, processedStats):
         self.fractionBound = mpo[dataset.likelihood.diff_coefs < 0.1].sum() / mpo.sum()
         self.cumulativeMedian = mpo[self.cum_median(mpo)]
-        self.rois = rois[int(targetNum)-1]
+        try:
+            self.rois = rois[int(targetNum)-1]
+        except:
+            self.rois = None
         self.processedStats = processedStats
-        self.meanIntensity, self.totalIntensity = self.getIntensity(plt.imread(targetFolder + "/snaps2/" + targetNum + ".tif"))
-        self.altMeanIntensity, self.altTotalIntensity = self.getIntensity(plt.imread(targetFolder + "/snaps4/" + targetNum + ".tif"))
+        if self.rois is not None:
+            self.meanIntensity, self.totalIntensity = self.getIntensity(plt.imread(targetFolder + "/snaps2/" + targetNum + ".tif"))
+            self.altMeanIntensity, self.altTotalIntensity = self.getIntensity(plt.imread(targetFolder + "/snaps4/" + targetNum + ".tif"))
 
         
         
