@@ -266,8 +266,9 @@ class MainWindow(QMainWindow):
     # Saves the current dataset state to a .pickle file
     def savePickle(self):
         fileName, _filter = QFileDialog.getSaveFileName(self, 'Save File', '', '*.pickle')
-        with open(fileName, 'wb') as f:
-            pickle.dump(self.dataset, f, pickle.HIGHEST_PROTOCOL)
+        if fileName != '':    
+            with open(fileName, 'wb') as f:
+                pickle.dump(self.dataset, f, pickle.HIGHEST_PROTOCOL)
          
     #Display progress bars in terms of percent
     def displayProgress(self, percent : float):
@@ -305,13 +306,21 @@ class MainWindow(QMainWindow):
         for i in range(len(self.fileNames)):
             self.fileNames[i] = self.fileNames[i].replace("/",self.slashKey)
         self.targetFolder = path.split(path.split(self.fileNames[0])[0])[0]
+        if (not self.checkFile()):
+            self.paramConf.setText("INVALID FILE - PLEASE RETRY")
+            return
         try:
             self.rois = self.loadRois()
         except:
             self.rois = None
         progress = 0
         for file in self.fileNames:
-            self.mpo.append(self.dataset.calc_marginal_posterior_occs(file))
+            occs = self.dataset.marginal_posterior_occs
+            for fileOcc in occs:
+                counter = 0
+                for n in fileOcc:
+                    counter += n
+                self.mpo.append(fileOcc/n)
             progress += 100 / len(self.fileNames)
             self.displayProgress(progress)
         processedStats = self.dataset._get_processed_track_statistics().set_index("condition")
@@ -328,7 +337,11 @@ class MainWindow(QMainWindow):
         self.paramWidget.hide()
         self.selectWidget.show()
         self.updateDisplay()
-
+        
+    def checkFile(self) -> bool:
+        if not path.isdir(self.targetFolder):
+            return False
+        return True
     
     #Returns short versions of a list of fileNames
     def getShortNames(self, fileNames):
@@ -459,10 +472,14 @@ class MainWindow(QMainWindow):
     
     #Updates display based on selected image
     def updateDisplay(self):
+        invalidNumber = False
         try:
             self.setPicture()
         except:
             self.cellDisplay[0].setText("Images Not Present or Inaccessible")
+            self.cellDisplay[1].clear()
+            self.cellDisplay[2].clear()
+            invalidNumber = True
         self.graphDiffusionSpectrum()
         graph = QPixmap()
         graph.load("diffusion_spectrum.png")
@@ -471,7 +488,7 @@ class MainWindow(QMainWindow):
         self.fractionBound.setText("Fraction Bound (Probability of diffusion coefficient < 0.1): " + str(self.stats[self.selectedFile].fractionBound))
         self.cumulativeMedian.setText("Median Diffusion Coefficient: " + str(self.stats[self.selectedFile].cumulativeMedian))
         self.updateStatTracks()
-        if self.rois is not None:    
+        if not invalidNumber:    
             self.meanIntensity.setText("Mean Pixel Intensity of Target Area: " + str(self.stats[self.selectedFile].meanIntensity))
             self.totalIntensity.setText("Total Pixel Intensity of Target Area: " + str(self.stats[self.selectedFile].totalIntensity))
             self.altMeanIntensity.setText("Mean Pixel Intensity of Target Area (Alternate View): " + str(self.stats[self.selectedFile].altMeanIntensity))
