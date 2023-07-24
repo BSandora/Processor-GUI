@@ -14,6 +14,7 @@ from saspt import StateArrayDataset
 from saspt import StateArray
 from os import path
 from PIL import Image
+from cell_culler import run_cell_culler
 
 
 import sys
@@ -79,7 +80,11 @@ class MainWindow(QMainWindow):
         
     #Determines the correct 'slash' or file separator on the given os    
     def findSlashKey(self):
-        return path.join('a', 'dir')[1]
+        key = path.join('a', 'dir')[1]
+        #Safety mechanism
+        if (key == '\\'):
+            key = '\\'
+        return key
         
     #Initialized the interface for uploading files
     def initUploadInterface(self):
@@ -248,20 +253,48 @@ class MainWindow(QMainWindow):
     # Accepts one or more user selected files and loads them into detections folder
     def uploadFiles(self):
         self.fileNames, self._filter = QFileDialog.getOpenFileNames(self, "Select Files", ".", "Quot Traj Files (*.csv)")
-        self.detections = []
-        for file in self.fileNames:
-            self.detections.append(load_detections(file))
-        self.fileConf.setText("Files uploaded successfully")
-        self.paramWidget.show()
+        if self.fileNames is not None:   
+            for i in range(len(self.fileNames)):
+                self.fileNames[i] = self.fileNames[i].replace("/",self.slashKey)
+            self.detections = []
+            for file in self.fileNames:
+                self.detections.append(load_detections(file))
+            self.fileConf.setText("Files uploaded successfully")
+            self.targetFolder = path.split(path.split(self.fileNames[0])[0])[0]
+            culling = True
+            fileNums = self.getFileNum(self.getShortNames(self.fileNames))
+            print(fileNums)
+            for i in range(len(fileNums)):
+                try:
+                    fileNums[i] = int(fileNums[i])
+                except:
+                    culling = False
+                    break
+            if culling:
+                kept = self.getFileNum(self.getShortNames(run_cell_culler(self.targetFolder, fileNums)['keep']))
+                oldFileNames = self.fileNames.copy()
+                oldFileNums = self.getFileNum(self.getShortNames(self.fileNames))
+                self.fileNames = []
+                for i in range(len(oldFileNames)):
+                    if oldFileNums[i] in kept:
+                        self.fileNames.append(oldFileNames[i])
+                print(kept)
+                print(oldFileNames)
+                print(oldFileNums)
+                print(self.fileNames)
+            self.shortNames = self.getShortNames(self.fileNames)
+            self.paramWidget.show()
         
     # Accepts a .pickle file and loads it into a dataset
     def uploadPickle(self):
         fileNames, _filter = QFileDialog.getOpenFileName(self, "Select Files", ".", "Pickle Files (*.pickle, *.pkl)")
-        with open(fileNames, 'rb') as f:
-            self.dataset = pickle.load(f)
-        self.fileNames = self.dataset.paths['filepath']
-        self.shortNames = self.getShortNames(self.fileNames)
-        self.initGUI()
+        if fileNames is not None:        
+            with open(fileNames, 'rb') as f:
+                self.dataset = pickle.load(f)
+            self.fileNames = self.dataset.paths['filepath']
+            self.shortNames = self.getShortNames(self.fileNames)
+            self.targetFolder = path.split(path.split(self.fileNames[0])[0])[0]
+            self.initGUI()
         
     # Saves the current dataset state to a .pickle file
     def savePickle(self):
@@ -291,7 +324,6 @@ class MainWindow(QMainWindow):
 
                 likelihood_type = self.paramInputs[9].text())
         self.displayProgress('0')
-        self.shortNames = self.getShortNames(self.fileNames)
         self.paths = dict(filepath=self.fileNames, condition=self.shortNames)
         self.stateArrays = []
         for detect in self.detections:
@@ -305,7 +337,6 @@ class MainWindow(QMainWindow):
         self.stats = []
         for i in range(len(self.fileNames)):
             self.fileNames[i] = self.fileNames[i].replace("/",self.slashKey)
-        self.targetFolder = path.split(path.split(self.fileNames[0])[0])[0]
         if (not self.checkFile()):
             self.paramConf.setText("INVALID FILE - PLEASE RETRY")
             return
@@ -354,7 +385,11 @@ class MainWindow(QMainWindow):
     def getFileNum(self, fileNames):
         nums = []
         for file in fileNames:
-            nums.append(re.split('_', file)[0])
+            split = re.split('\.', file)
+            if split[1] == 'csv':
+                nums.append(re.split('_', file)[0])
+            else:
+                nums.append(split[0])
         return nums
     
     #Reads all rois into an array
