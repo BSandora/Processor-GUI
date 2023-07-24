@@ -293,7 +293,7 @@ class MainWindow(QMainWindow):
                 self.dataset = pickle.load(f)
             self.fileNames = self.dataset.paths['filepath']
             self.shortNames = self.getShortNames(self.fileNames)
-            self.targetFolder = path.split(path.split(self.fileNames[0])[0])[0]
+            self.targetFolder = path.dirname(self.fileNames[0])
             self.initGUI()
         
     # Saves the current dataset state to a .pickle file
