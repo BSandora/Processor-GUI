@@ -26,7 +26,6 @@ def display_cell_prompt(images: list[Tuple[str, str]],
     
     # Output dictionary
     labeled = dict(keep=[], cull=[])
-    resolved = 0
 
     # Check that ROIs are correct shape before using
     if rois is not None:
@@ -102,11 +101,8 @@ def display_cell_prompt(images: list[Tuple[str, str]],
             resolve()
             
         def resolve():
-            nonlocal resolved, target
-            resolved += 1
-            print("kept")
+            nonlocal target
             plt.close()
-            print(target)
             if target > 0:
                 target -= 1
                 figArray[target].canvas.show()
@@ -128,7 +124,6 @@ def display_cell_prompt(images: list[Tuple[str, str]],
             upper_limit_line.set_xdata([val[1], val[1]])
 
             # Redraw the figure to ensure it updates
-            print("slid")
 
         slider.on_changed(slider_update)
 

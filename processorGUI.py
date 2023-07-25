@@ -102,8 +102,13 @@ class MainWindow(QMainWindow):
         uploadBarWidget.setLayout(uploadBarLayout)
         uploadBarWidget.setFixedSize(QSize(200,100))
         self.fileConf = QLabel()
+        self.cullButton = QPushButton("Cull Cells")
+        self.cullButton.clicked.connect(self.cullFiles)
+        self.cullButton.setFixedSize(QSize(200,50))
+        self.cullButton.hide()
         fileLayout.addWidget(uploadBarWidget)
         fileLayout.addWidget(self.fileConf)
+        fileLayout.addWidget(self.cullButton)
         fileWidget = QWidget()
         fileWidget.setLayout(fileLayout)
         return fileWidget
@@ -259,31 +264,27 @@ class MainWindow(QMainWindow):
             self.detections = []
             for file in self.fileNames:
                 self.detections.append(load_detections(file))
-            self.fileConf.setText("Files uploaded successfully")
             self.targetFolder = path.split(path.split(self.fileNames[0])[0])[0]
-            culling = True
-            fileNums = self.getFileNum(self.getShortNames(self.fileNames))
-            print(fileNums)
-            for i in range(len(fileNums)):
-                try:
-                    fileNums[i] = int(fileNums[i])
-                except:
-                    culling = False
-                    break
-            if culling:
-                kept = self.getFileNum(self.getShortNames(run_cell_culler(self.targetFolder, fileNums)['keep']))
-                oldFileNames = self.fileNames.copy()
-                oldFileNums = self.getFileNum(self.getShortNames(self.fileNames))
-                self.fileNames = []
-                for i in range(len(oldFileNames)):
-                    if oldFileNums[i] in kept:
-                        self.fileNames.append(oldFileNames[i])
-                print(kept)
-                print(oldFileNames)
-                print(oldFileNums)
-                print(self.fileNames)
             self.shortNames = self.getShortNames(self.fileNames)
+            self.cullButton.show()
             self.paramWidget.show()
+            
+    #Uses cell culler to cull cells in visual interface        
+    def cullFiles(self):
+        fileNums = self.getFileNum(self.getShortNames(self.fileNames))
+        for i in range(len(fileNums)):
+            try:
+                fileNums[i] = int(fileNums[i])
+            except:
+                return
+        kept = self.getFileNum(self.getShortNames(run_cell_culler(self.targetFolder, fileNums)['keep']))
+        oldFileNames = self.fileNames.copy()
+        oldFileNums = self.getFileNum(self.getShortNames(self.fileNames))
+        self.fileNames = []
+        for i in range(len(oldFileNames)):
+            if oldFileNums[i] in kept:
+                self.fileNames.append(oldFileNames[i])
+        self.shortNames = self.getShortNames(self.fileNames)
         
     # Accepts a .pickle file and loads it into a dataset
     def uploadPickle(self):
