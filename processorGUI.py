@@ -106,6 +106,10 @@ class MainWindow(QMainWindow):
         self.cullButton.clicked.connect(self.cullFiles)
         self.cullButton.setFixedSize(QSize(200,50))
         self.cullButton.hide()
+        self.maskButton = QPushButton("Auto Masker")
+        self.maskButton.clicked.connect(self.autoMask)
+        self.maskButton.setFixedSize(QSize(200,50))
+        self.maskButton.hide()
         fileLayout.addWidget(uploadBarWidget)
         fileLayout.addWidget(self.fileConf)
         fileLayout.addWidget(self.cullButton)
@@ -267,6 +271,7 @@ class MainWindow(QMainWindow):
             self.targetFolder = path.split(path.split(self.fileNames[0])[0])[0]
             self.shortNames = self.getShortNames(self.fileNames)
             self.cullButton.show()
+            self.maskButton.show()
             self.paramWidget.show()
             
     #Uses cell culler to cull cells in visual interface        
@@ -285,6 +290,9 @@ class MainWindow(QMainWindow):
             if oldFileNums[i] in kept:
                 self.fileNames.append(oldFileNames[i])
         self.shortNames = self.getShortNames(self.fileNames)
+        
+    def autoMask(self):
+        
         
     # Accepts a .pickle file and loads it into a dataset
     def uploadPickle(self):
@@ -468,13 +476,13 @@ class MainWindow(QMainWindow):
         arr = []
         if (index == 0):
             for stat in self.stats:
-                arr.append(float(stat.fractionBound))
+                arr.append(float(stat.getStat('fractionBound')))
         elif (index == 1):
             for stat in self.stats:
-                arr.append(float(stat.cumulativeMedian))
+                arr.append(float(stat.getStat('cumulativeMedian')))
         else:
             for stat in self.stats:
-                arr.append(stat.processedStats.loc[self.keys[index-2]])
+                arr.append(stat.getStat(self.keys[index-2]))
         return arr
     
     #Generates and sets the cell-level pictures
@@ -521,14 +529,14 @@ class MainWindow(QMainWindow):
         graph.load("diffusion_spectrum.png")
         graph = graph.scaled(QSize(600, 300), Qt.KeepAspectRatio)
         self.singleGraph.setPixmap(graph)
-        self.fractionBound.setText("Fraction Bound (Probability of diffusion coefficient < 0.1): " + str(self.stats[self.selectedFile].fractionBound))
-        self.cumulativeMedian.setText("Median Diffusion Coefficient: " + str(self.stats[self.selectedFile].cumulativeMedian))
+        self.fractionBound.setText("Fraction Bound (Probability of diffusion coefficient < 0.1): " + self.stats[self.selectedFile].getStatStr('fractionBound'))
+        self.cumulativeMedian.setText("Median Diffusion Coefficient: " + self.stats[self.selectedFile].getStatStr('cumulativeMedian'))
         self.updateStatTracks()
         if not invalidNumber:    
-            self.meanIntensity.setText("Mean Pixel Intensity of Target Area: " + str(self.stats[self.selectedFile].meanIntensity))
-            self.totalIntensity.setText("Total Pixel Intensity of Target Area: " + str(self.stats[self.selectedFile].totalIntensity))
-            self.altMeanIntensity.setText("Mean Pixel Intensity of Target Area (Alternate View): " + str(self.stats[self.selectedFile].altMeanIntensity))
-            self.altTotalIntensity.setText("Total Pixel Intensity of Target Area (Alternate View): " + str(self.stats[self.selectedFile].altTotalIntensity))
+            self.meanIntensity.setText("Mean Pixel Intensity of Target Area: " + self.stats[self.selectedFile].getStatStr('meanIntensity'))
+            self.totalIntensity.setText("Total Pixel Intensity of Target Area: " + self.stats[self.selectedFile].getStatStr('totalIntensity'))
+            self.altMeanIntensity.setText("Mean Pixel Intensity of Target Area (Alternate View): " + self.stats[self.selectedFile].getStatStr('altMeanIntensity'))
+            self.altTotalIntensity.setText("Total Pixel Intensity of Target Area (Alternate View): " + self.stats[self.selectedFile].getStatStr('altTotalIntensity'))
         if (self.imageWidget.imageSelect.currentIndex() == 1):
             self.loadTemporalPlot()
     
@@ -537,7 +545,7 @@ class MainWindow(QMainWindow):
         for i in range(9):
             label = self.statTrackLabels[i]
             key = self.keys[i]
-            label.setText(key + ": " + str(self.stats[self.selectedFile].processedStats.loc[key]))
+            label.setText(key + ": " + self.stats[self.selectedFile].getStatStr(key))
         
     #Loads the Temporal Plot and registers that in ImageWindow
     def loadTemporalPlot(self):
@@ -613,7 +621,7 @@ class MainWindow(QMainWindow):
             if (len(self.roiPoints) > 0):
                 sum_unnormalized = np.zeros((100,))
                 for ref in self.roiPoints:
-                    sum_unnormalized += self.mpo[ref]*self.stats[ref].processedStats.loc['n_jumps']
+                    sum_unnormalized += self.mpo[ref]*self.stats[ref].getStat('n_jumps')
                 self.normalized = sum_unnormalized / np.sum(sum_unnormalized)
                 self.roiFractionBound.setText("Weighted Fraction Bound: " + str(self.normalized[self.dataset.likelihood.diff_coefs < 0.1].sum() / self.normalized.sum()))
                 self.generateSpectrum(self.roiPoints)
@@ -624,7 +632,7 @@ class MainWindow(QMainWindow):
                         if (i == 0):
                             sums[0] += stats.cumulativeMedian
                         else:
-                            sums[i] += stats.processedStats.loc[self.keys[i-1]]
+                            sums[i] += stats.getStat(self.keys[i-1])
                 
                 sums /= len(self.roiPoints)
                 keys = ['Cumulative Median']
@@ -791,16 +799,27 @@ class GraphWidget(PlotWidget):
 class Stats():
     
     def __init__(self, mpo, dataset, targetFolder, targetNum, rois, processedStats):
-        self.fractionBound = mpo[dataset.likelihood.diff_coefs < 0.1].sum() / mpo.sum()
-        self.cumulativeMedian = mpo[self.cum_median(mpo)]
+        self.statDict = {}
+        try:
+            self.statDict.update({'fractionBound': mpo[dataset.likelihood.diff_coefs < 0.1].sum() / mpo.sum()})
+            self.statDict.update({'cumulativeMedian': mpo[self.cum_median(mpo)]})
+        except:
+            return
         try:
             self.rois = rois[int(targetNum)-1]
         except:
             self.rois = None
-        self.processedStats = processedStats
+        self.statDict.update(processedStats)
         if self.rois is not None:
-            self.meanIntensity, self.totalIntensity = self.getIntensity(plt.imread(targetFolder + "/snaps2/" + targetNum + ".tif"))
-            self.altMeanIntensity, self.altTotalIntensity = self.getIntensity(plt.imread(targetFolder + "/snaps4/" + targetNum + ".tif"))
+            try:
+                meanIntensity, totalIntensity = self.getIntensity(plt.imread(targetFolder + "/snaps2/" + targetNum + ".tif"))
+                altMeanIntensity, altTotalIntensity = self.getIntensity(plt.imread(targetFolder + "/snaps4/" + targetNum + ".tif"))
+            except:
+                return
+            self.statDict.update({'meanIntensity': meanIntensity})
+            self.statDict.update({'totalIntensity': totalIntensity})
+            self.statDict.update({'altMeanIntensity': altMeanIntensity})
+            self.statDict.update({'altTotalIntensity': altTotalIntensity})
 
         
         
@@ -817,6 +836,18 @@ class Stats():
                 intensity += arr[i][j]
                 count += 1
         return intensity / count, intensity
+    
+    def getStat(self, stat : str):
+        try:
+            return self.statDict[stat]
+        except:
+            return -1
+        
+    def getStatStr(self, stat : str):
+        val = self.getStat(stat)
+        if val == -1:
+            return "Error"
+        return str(val)
         
     
 
