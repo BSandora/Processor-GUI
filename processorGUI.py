@@ -113,6 +113,7 @@ class MainWindow(QMainWindow):
         fileLayout.addWidget(uploadBarWidget)
         fileLayout.addWidget(self.fileConf)
         fileLayout.addWidget(self.cullButton)
+        fileLayout.addWidget(self.maskButton)
         fileWidget = QWidget()
         fileWidget.setLayout(fileLayout)
         return fileWidget
@@ -262,7 +263,7 @@ class MainWindow(QMainWindow):
     # Accepts one or more user selected files and loads them into detections folder
     def uploadFiles(self):
         self.fileNames, self._filter = QFileDialog.getOpenFileNames(self, "Select Files", ".", "Quot Traj Files (*.csv)")
-        if self.fileNames is not None:   
+        if len(self.fileNames) > 0:   
             for i in range(len(self.fileNames)):
                 self.fileNames[i] = self.fileNames[i].replace("/",self.slashKey)
             self.detections = []
@@ -292,12 +293,12 @@ class MainWindow(QMainWindow):
         self.shortNames = self.getShortNames(self.fileNames)
         
     def autoMask(self):
-        
+        return
         
     # Accepts a .pickle file and loads it into a dataset
     def uploadPickle(self):
         fileNames, _filter = QFileDialog.getOpenFileName(self, "Select Files", ".", "Pickle Files (*.pickle, *.pkl)")
-        if fileNames is not None:        
+        if not fileNames == "":        
             with open(fileNames, 'rb') as f:
                 self.dataset = pickle.load(f)
             self.fileNames = self.dataset.paths['filepath']
@@ -365,7 +366,7 @@ class MainWindow(QMainWindow):
             self.displayProgress(progress)
         processedStats = self.dataset._get_processed_track_statistics().set_index("condition")
         for i in range(len(self.fileNames)):
-            self.stats.append(Stats(self.mpo[i], self.dataset, self.targetFolder, self.getFileNum(self.shortNames)[i], self.rois, processedStats.loc[self.shortNames[i]]))
+            self.stats.append(Stats(self.mpo[i], self.dataset, self.targetFolder, self.getFileNum(self.shortNames)[i], self.rois, processedStats.loc[processedStats['filepath'] == self.fileNames[i]]))
         self.paramConf.setText("Dataset Initialized")
         self.paramConf.repaint()
         self.statsWidget.show()
@@ -809,7 +810,7 @@ class Stats():
             self.rois = rois[int(targetNum)-1]
         except:
             self.rois = None
-        self.statDict.update(processedStats)
+        self.statDict.update((processedStats.iloc[0]).to_dict())
         if self.rois is not None:
             try:
                 meanIntensity, totalIntensity = self.getIntensity(plt.imread(targetFolder + "/snaps2/" + targetNum + ".tif"))
