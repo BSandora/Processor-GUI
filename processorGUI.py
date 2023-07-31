@@ -15,6 +15,7 @@ from saspt import StateArray
 from os import path
 from PIL import Image
 from cell_culler import run_cell_culler
+from automasker_OW import runMasker
 
 
 import sys
@@ -110,10 +111,18 @@ class MainWindow(QMainWindow):
         self.maskButton.clicked.connect(self.autoMask)
         self.maskButton.setFixedSize(QSize(200,50))
         self.maskButton.hide()
+        useMaskLayout = QHBoxLayout()
+        useMaskLayout.addWidget(QLabel("Analyze Only Trajectories in Mask"))
+        self.useMaskCheckBox = QCheckBox()
+        useMaskLayout.addWidget(QCheckBox())
+        self.useMaskWidget = QWidget()
+        self.useMaskWidget.setLayout(useMaskLayout)
+        self.useMaskWidget.hide()
         fileLayout.addWidget(uploadBarWidget)
         fileLayout.addWidget(self.fileConf)
         fileLayout.addWidget(self.cullButton)
         fileLayout.addWidget(self.maskButton)
+        fileLayout.addWidget(self.useMaskWidget)
         fileWidget = QWidget()
         fileWidget.setLayout(fileLayout)
         return fileWidget
@@ -293,6 +302,8 @@ class MainWindow(QMainWindow):
         self.shortNames = self.getShortNames(self.fileNames)
         
     def autoMask(self):
+        runMasker(path.split(self.fileNames[0])[0])
+        self.useMaskWidget.show()
         return
         
     # Accepts a .pickle file and loads it into a dataset
@@ -320,6 +331,10 @@ class MainWindow(QMainWindow):
     
     #Registers settings and utilizes them to initialize all relevant data
     def confirmSettings(self):
+        if (self.useMaskCheckBox.checkState() == Qt.CheckState.Checked):
+            maskFolder = path.join(self.targetFolder, 'masked')
+            if (path.isdir(maskFolder)):
+                self.findMaskedFiles(maskFolder)
         self.settings = dict(pixel_size_um = float(self.paramInputs[0].text()),
                 frame_interval = float(self.paramInputs[1].text()),
                 focal_depth = float(self.paramInputs[2].text()),
@@ -340,6 +355,11 @@ class MainWindow(QMainWindow):
             self.stateArrays.append(StateArray.from_detections(detect, **self.settings))
         self.dataset = StateArrayDataset.from_kwargs(pd.DataFrame(self.paths), path_col = 'filepath', condition_col = 'condition', **self.settings)
         self.initGUI()
+        
+    #Locates and reassigns corresponding masked files for each given file
+    def findMaskFiles(self, folder):
+        for i in range(len(self.fileNames)):
+            self.fileNames[i] = path.join(folder, path.split(self.fileNames[i])[1])
         
     #Initializes analysis and preloads all necessary information to run the GUI
     def initGUI(self):    
