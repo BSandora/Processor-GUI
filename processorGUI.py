@@ -15,7 +15,7 @@ from saspt import StateArray
 from os import path
 from PIL import Image
 from cell_culler import run_cell_culler
-from automasker_OW import runMasker
+from automasker import runMasker
 
 
 import sys
@@ -302,7 +302,7 @@ class MainWindow(QMainWindow):
         self.shortNames = self.getShortNames(self.fileNames)
         
     def autoMask(self):
-        runMasker(path.split(self.fileNames[0])[0])
+        runMasker(self.fileNames)
         self.useMaskWidget.show()
         return
         
