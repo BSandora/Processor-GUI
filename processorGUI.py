@@ -5,7 +5,7 @@
 """
 
 from PySide6.QtCore import QSize, Qt, QPointF
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QImageReader
 from PySide6.QtWidgets import QApplication, QWidget, QComboBox, QCheckBox, QLabel, QLineEdit, QMainWindow, QPushButton, QGridLayout, QFileDialog, QVBoxLayout, QHBoxLayout
 from pyqtgraph import PlotWidget
 import pyqtgraph as pg
@@ -32,6 +32,7 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        QImageReader.setAllocationLimit(0)
         
         self.setWindowTitle("SASPT Processing")
         self.setFixedSize(QSize(1400,700))
