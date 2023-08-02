@@ -79,11 +79,12 @@ def make_apply_mask(image_path: str,
     # Read in image or movie, max-intensity project and blur
     image = ImageReader(image_path)
     proj = image.get_frame(0)
+    roi_size = image.shape[1] * image.shape[2]
     gauss_blur = gaussian_filter(proj, sigma=1.5)
 
     # Mask, remove small bits, fill holes
     mask = gauss_blur > threshold_isodata(gauss_blur)
-    removed = remove_small_objects(mask, 3000)
+    removed = remove_small_objects(mask, int(roi_size/5))
     filled = remove_small_holes(removed, 500)
 
     # Get coordinates for polygon bounding this refined mask
