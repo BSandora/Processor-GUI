@@ -56,9 +56,6 @@ class MainWindow(QMainWindow):
         self.statsWidget = self.initStatDisplay()
         self.statsWidget.hide()
         
-        #Statistics Graph
-        self.statGraphWidget = self.initStatGraph()
-        self.statGraphWidget.hide()
         
         #Images Display
         self.imageWidget = ImageWindow(self)
@@ -305,7 +302,6 @@ class MainWindow(QMainWindow):
     def autoMask(self):
         runMasker(self.fileNames)
         self.useMaskWidget.show()
-        return
         
     # Accepts a .pickle file and loads it into a dataset
     def uploadPickle(self):
@@ -400,6 +396,10 @@ class MainWindow(QMainWindow):
         self.selectWidget.show()
         self.updateDisplay()
         
+        #Statistics Graph
+        self.statGraphWidget = self.initStatGraph()
+        self.statGraphWidget.hide()
+        
     def checkFile(self) -> bool:
         if not path.isdir(self.targetFolder):
             return False
@@ -487,25 +487,34 @@ class MainWindow(QMainWindow):
     #Stat Select index changed
     def stat_changed(self, index):
         self.graphWidget.clear()
-        self.graphX = self.getArrayOfStats(self.statSelectX.currentIndex())
-        self.graphY = self.getArrayOfStats(self.statSelectY.currentIndex())
+        self.graphX, logX = self.getArrayOfStats(self.statSelectX.currentIndex())
+        self.graphY, logY = self.getArrayOfStats(self.statSelectY.currentIndex())
         self.graphWidget.plot(self.graphX, self.graphY, pen=None, symbol='o', symbolPen=None, symbolSize=10, symbolBrush=(200, 100, 255))
+        self.graphWidget.getPlotItem().setLogMode(logX, logY)
         self.graphWidget.showGrid(x=True, y=True)
         self.graphWidget.loadNew(self.graphX, self.graphY)
         
     #Returns an array of stats of a given type
     def getArrayOfStats(self, index : int):
         arr = []
+        log = False
         if (index == 0):
             for stat in self.stats:
                 arr.append(float(stat.getStat('fractionBound')))
         elif (index == 1):
+            log = True
             for stat in self.stats:
                 arr.append(float(stat.getStat('cumulativeMedian')))
+        elif (index == 11):
+            for stat in self.stats:
+                arr.append(stat.getStat('roiX'))
+        elif (index == 12):
+            for stat in self.stats:
+                arr.append(stat.getStat('roiY'))
         else:
             for stat in self.stats:
                 arr.append(stat.getStat(self.keys[index-2]))
-        return arr
+        return arr, log
     
     #Generates and sets the cell-level pictures
     def setPicture(self):
@@ -521,10 +530,10 @@ class MainWindow(QMainWindow):
                                       width=self.rois[int(targetNum)-1][2] - self.rois[int(targetNum)-1][0],
                                       height=self.rois[int(targetNum)-1][3] - self.rois[int(targetNum)-1][1],
                                       color='r', fill=False))
-        plt.savefig("annotated_cell.tif", dpi=1400, bbox_inches='tight', pad_inches=0)
+        plt.savefig("annotated_cell.svg", dpi=1400, bbox_inches='tight', pad_inches=0)
         plt.close()
         cellPicture = QPixmap()
-        cellPicture.load("annotated_cell.tif")
+        cellPicture.load("annotated_cell.svg")
         cellPicture = cellPicture.scaled(QSize(200, 200), Qt.KeepAspectRatio)
         self.cellDisplay[0].setPixmap(cellPicture)
         
@@ -538,14 +547,14 @@ class MainWindow(QMainWindow):
     
     #Updates display based on selected image
     def updateDisplay(self):
-        invalidNumber = False
+        self.invalidNumber = False
         try:
             self.setPicture()
         except:
             self.cellDisplay[0].setText("Images Not Present or Inaccessible")
             self.cellDisplay[1].clear()
             self.cellDisplay[2].clear()
-            invalidNumber = True
+            self.invalidNumber = True
         self.graphDiffusionSpectrum()
         graph = QPixmap()
         graph.load("diffusion_spectrum.png")
@@ -554,7 +563,7 @@ class MainWindow(QMainWindow):
         self.fractionBound.setText("Fraction Bound (Probability of diffusion coefficient < 0.1): " + self.stats[self.selectedFile].getStatStr('fractionBound'))
         self.cumulativeMedian.setText("Median Diffusion Coefficient: " + self.stats[self.selectedFile].getStatStr('cumulativeMedian'))
         self.updateStatTracks()
-        if not invalidNumber:    
+        if not self.invalidNumber:    
             self.meanIntensity.setText("Mean Pixel Intensity of Target Area: " + self.stats[self.selectedFile].getStatStr('meanIntensity'))
             self.totalIntensity.setText("Total Pixel Intensity of Target Area: " + self.stats[self.selectedFile].getStatStr('totalIntensity'))
             self.altMeanIntensity.setText("Mean Pixel Intensity of Target Area (Alternate View): " + self.stats[self.selectedFile].getStatStr('altMeanIntensity'))
@@ -601,6 +610,8 @@ class MainWindow(QMainWindow):
         select = QComboBox()
         select.addItems(['Fraction Bound', 'Median Diffusion Coefficient'])
         select.addItems(self.keys)
+        if not self.invalidNumber:
+            select.addItems(['ROI X', 'ROI Y'])
         select.currentIndexChanged.connect(self.stat_changed)
         return select
     
@@ -842,6 +853,8 @@ class Stats():
             self.statDict.update({'totalIntensity': totalIntensity})
             self.statDict.update({'altMeanIntensity': altMeanIntensity})
             self.statDict.update({'altTotalIntensity': altTotalIntensity})
+            self.statDict.update({'roiX': self.rois[2]-self.rois[0]})
+            self.statDict.update({'roiY': self.rois[3]-self.rois[1]})
 
         
         
