@@ -511,6 +511,9 @@ class MainWindow(QMainWindow):
         elif (index == 12):
             for stat in self.stats:
                 arr.append(stat.getStat('roiY'))
+        elif (index == 13):
+            for num in self.getFileNum(self.shortNames):
+                arr.append(int(num))
         else:
             for stat in self.stats:
                 arr.append(stat.getStat(self.keys[index-2]))
@@ -611,7 +614,7 @@ class MainWindow(QMainWindow):
         select.addItems(['Fraction Bound', 'Median Diffusion Coefficient'])
         select.addItems(self.keys)
         if not self.invalidNumber:
-            select.addItems(['ROI X', 'ROI Y'])
+            select.addItems(['ROI X', 'ROI Y', 'Number'])
         select.currentIndexChanged.connect(self.stat_changed)
         return select
     
