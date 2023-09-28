@@ -35,7 +35,7 @@ class MainWindow(QMainWindow):
         QImageReader.setAllocationLimit(0)
         
         self.setWindowTitle("SASPT Processing")
-        self.setFixedSize(QSize(1400,700))
+        self.setFixedSize(QSize(1400,788))
         
         self.layout = QGridLayout()
         
@@ -87,6 +87,7 @@ class MainWindow(QMainWindow):
         
     #Initialized the interface for uploading files
     def initUploadInterface(self):
+        uploadLayout = QHBoxLayout()
         fileLayout = QVBoxLayout()
         uploadBarLayout = QHBoxLayout()
         fileButton = QPushButton("Upload Files")
@@ -123,7 +124,33 @@ class MainWindow(QMainWindow):
         fileLayout.addWidget(self.useMaskWidget)
         fileWidget = QWidget()
         fileWidget.setLayout(fileLayout)
-        return fileWidget
+        
+        gridSelectLayout = QGridLayout()
+        self.gridSelectFields = self.getGridSelectFields()
+        counter = 0
+        for i in range(3):
+            for j in range(3):
+                gridSelectLayout.addWidget(self.gridSelectFields[counter], i, j)
+                counter += 1
+        gridSelectWidget = QWidget()
+        gridSelectWidget.setLayout(gridSelectLayout)
+        
+        uploadLayout.addWidget(fileWidget)
+        uploadLayout.addWidget(gridSelectWidget)
+        uploadWidget = QWidget()
+        uploadWidget.setLayout(uploadLayout)
+        return uploadWidget
+    
+    #Returns array of necessary dropdown fields for configuring 3x3 display space
+    def getGridSelectFields(self):
+        folders = ['--', 'snaps', 'snaps2', 'snaps3', 'snaps4', 'snaps5', 'snaps6', 'snaps7', 'snaps8', 'snaps9']
+        fieldList = []
+        for i in range(9): 
+            field = QComboBox()
+            field.addItems(folders)
+            field.setCurrentIndex(i+1)
+            fieldList.append(field)
+        return fieldList
     
     #Initialize the interface for inputting dataset parameters
     def initParamInterface(self):
@@ -248,14 +275,12 @@ class MainWindow(QMainWindow):
         self.selectBar = QComboBox()
         self.selectBar.currentIndexChanged.connect(self.index_changed)
         cellBarLayout = QGridLayout()
-        cellBarLayout.addWidget(QLabel("Protein View"), 0, 0)
-        cellBarLayout.addWidget(QLabel("Cropped View"), 0, 1)
-        cellBarLayout.addWidget(QLabel("Alternate Cell View"), 0, 2)
         self.cellDisplay = []
         for i in range(3):
-            label = QLabel()
-            self.cellDisplay.append(label)
-            cellBarLayout.addWidget(label, 1, i)
+            for j in range(3):
+                label = QLabel()
+                self.cellDisplay.append(label)
+                cellBarLayout.addWidget(label, i, j)
         cellBar = QWidget()
         cellBar.setLayout(cellBarLayout)
         self.singleGraph = QLabel()
@@ -270,7 +295,7 @@ class MainWindow(QMainWindow):
     # Accepts one or more user selected files and loads them into detections folder
     def uploadFiles(self):
         self.fileNames, self._filter = QFileDialog.getOpenFileNames(self, "Select Files", ".", "Quot Traj Files (*.csv)")
-        if len(self.fileNames) > 0:   
+        if not self.fileNames == "":   
             for i in range(len(self.fileNames)):
                 self.fileNames[i] = self.fileNames[i].replace("/",self.slashKey)
             self.detections = []
@@ -351,6 +376,7 @@ class MainWindow(QMainWindow):
         for detect in self.detections:
             self.stateArrays.append(StateArray.from_detections(detect, **self.settings))
         self.dataset = StateArrayDataset.from_kwargs(pd.DataFrame(self.paths), path_col = 'filepath', condition_col = 'condition', **self.settings)
+        self.pictureList = [x.currentText() for x in self.gridSelectFields]
         self.initGUI()
         
     #Locates and reassigns corresponding masked files for each given file
@@ -394,7 +420,7 @@ class MainWindow(QMainWindow):
         self.fileWidget.hide()
         self.paramWidget.hide()
         self.selectWidget.show()
-        self.updateDisplay()
+        #self.updateDisplay() - redundant, called through selectBar index_changed 
         
         #Statistics Graph
         self.statGraphWidget = self.initStatGraph()
@@ -522,42 +548,56 @@ class MainWindow(QMainWindow):
     #Generates and sets the cell-level pictures
     def setPicture(self):
         targetNum = self.getFileNum(self.shortNames)[self.selectedFile]
-        cellFig = plt.figure(constrained_layout=True)
-        cellAx = plt.axes()
-        cellFig.add_subplot(cellAx)
-        cellAx.set_yticks([])
-        cellAx.set_xticks([])
-        image = Image.open(path.join(self.targetFolder, "snaps2", targetNum + ".tif"))
-        cellAx.imshow(image)
-        cellAx.add_patch(plt.Rectangle(xy=(self.rois[int(targetNum)-1][0], self.rois[int(targetNum)-1][1]),
-                                      width=self.rois[int(targetNum)-1][2] - self.rois[int(targetNum)-1][0],
-                                      height=self.rois[int(targetNum)-1][3] - self.rois[int(targetNum)-1][1],
-                                      color='r', fill=False))
-        plt.savefig("annotated_cell.svg", dpi=1400, bbox_inches='tight', pad_inches=0)
-        plt.close()
-        cellPicture = QPixmap()
-        cellPicture.load("annotated_cell.svg")
-        cellPicture = cellPicture.scaled(QSize(200, 200), Qt.KeepAspectRatio)
-        self.cellDisplay[0].setPixmap(cellPicture)
+        imgSize = 150
         
-        for i in range(1,3):
-            cellPicture = QPixmap()
-            subfolders = ["snaps3", "snaps4"]
-            subfolder = subfolders[i-1]
-            cellPicture.load(path.join(self.targetFolder, subfolder, targetNum))
-            cellPicture = cellPicture.scaled(QSize(200, 200), Qt.KeepAspectRatio)
-            self.cellDisplay[i].setPixmap(cellPicture)
+        print(self.pictureList)
+        if 'snaps2' in self.pictureList and path.isfile(path.join(self.targetFolder, 'snaps2', targetNum)+'.tif'):
+            cellFig = plt.figure(constrained_layout=True)
+            cellAx = plt.axes()
+            cellFig.add_subplot(cellAx)
+            cellAx.set_yticks([])
+            cellAx.set_xticks([])
+            image = Image.open(path.join(self.targetFolder, "snaps2", targetNum + ".tif"))
+            cellAx.imshow(image)
+            cellAx.add_patch(plt.Rectangle(xy=(self.rois[int(targetNum)-1][0], self.rois[int(targetNum)-1][1]),
+                                          width=self.rois[int(targetNum)-1][2] - self.rois[int(targetNum)-1][0],
+                                          height=self.rois[int(targetNum)-1][3] - self.rois[int(targetNum)-1][1],
+                                          color='r', fill=False))
+            plt.savefig("annotated_cell.svg", dpi=1400, bbox_inches='tight', pad_inches=0)
+            plt.close()
+            cellPictureWithROI = QPixmap()
+            cellPictureWithROI.load("annotated_cell.svg")
+            cellPictureWithROI = cellPictureWithROI.scaled(QSize(imgSize, imgSize), Qt.KeepAspectRatio)
+        
+        counter = 0
+        for i in range(3):
+            for j in range(3):
+                subfolder = self.pictureList[counter]
+                imgPath = path.join(self.targetFolder, subfolder, targetNum)
+                print(imgPath+".tif")
+                print(path.isfile(imgPath+".tif"))
+                if (not subfolder == '--') and path.isfile(imgPath+".tif"):
+                    print("did a " + subfolder)
+                    if subfolder == 'snaps2':
+                        cellPicture = cellPictureWithROI
+                    else:
+                        cellPicture = QPixmap()
+                        cellPicture.load(imgPath)
+                        cellPicture = cellPicture.scaled(QSize(imgSize, imgSize), Qt.KeepAspectRatio)
+                    self.cellDisplay[counter].setPixmap(cellPicture)
+                counter += 1
     
     #Updates display based on selected image
     def updateDisplay(self):
         self.invalidNumber = False
         try:
             self.setPicture()
-        except:
+        except Exception as e:
             self.cellDisplay[0].setText("Images Not Present or Inaccessible")
             self.cellDisplay[1].clear()
             self.cellDisplay[2].clear()
             self.invalidNumber = True
+            print("An exception occurred:", e)
         self.graphDiffusionSpectrum()
         graph = QPixmap()
         graph.load("diffusion_spectrum.png")
