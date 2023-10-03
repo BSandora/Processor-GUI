@@ -16,6 +16,7 @@ from os import path
 from PIL import Image
 from cell_culler import run_cell_culler
 from automasker import runMasker
+from functools import partial
 
 
 import sys
@@ -26,7 +27,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import re
-
+import tifffile
 
 class MainWindow(QMainWindow):
     
@@ -47,6 +48,10 @@ class MainWindow(QMainWindow):
         
         #File Uploading Interface
         self.fileWidget = self.initUploadInterface()
+        
+        #Image Grid Interface
+        self.gridSelectWidget = self.initUploadGridInterface()
+        self.gridSelectWidget.hide()
         
         #Parameters Interface
         self.paramWidget = self.initParamInterface()
@@ -125,32 +130,59 @@ class MainWindow(QMainWindow):
         fileWidget = QWidget()
         fileWidget.setLayout(fileLayout)
         
-        gridSelectLayout = QGridLayout()
-        self.gridSelectFields = self.getGridSelectFields()
-        counter = 0
-        for i in range(3):
-            for j in range(3):
-                gridSelectLayout.addWidget(self.gridSelectFields[counter], i, j)
-                counter += 1
-        gridSelectWidget = QWidget()
-        gridSelectWidget.setLayout(gridSelectLayout)
         
         uploadLayout.addWidget(fileWidget)
-        uploadLayout.addWidget(gridSelectWidget)
         uploadWidget = QWidget()
         uploadWidget.setLayout(uploadLayout)
         return uploadWidget
     
+    #Initializes the image grid interface
+    def initUploadGridInterface(self):
+        gridSelectLayout = QVBoxLayout()
+        gridFieldLayout = QGridLayout()
+        self.gridSelectFieldBoxes= self.getGridSelectFields()
+        counter = 0
+        for i in range(3):
+            for j in range(3):
+                widget = QWidget()
+                layout = self.gridSelectFieldBoxes[counter]
+                widget.setLayout(layout)
+                gridFieldLayout.addWidget(widget, i, j)
+                counter += 1
+        gridFieldWidget = QWidget()
+        gridFieldWidget.setLayout(gridFieldLayout)
+                
+        label = QLabel("SELECT IMAGE ARRANGEMENT")
+        label.setFixedSize(QSize(200, 25))
+        gridSelectLayout.addWidget(label)
+        gridSelectLayout.addWidget(gridFieldWidget)
+        continueButton = QPushButton("Continue")
+        continueButton.clicked.connect(self.loadGUI)
+        gridSelectLayout.addWidget(continueButton)
+        gridSelectWidget = QWidget()
+        gridSelectWidget.setLayout(gridSelectLayout)
+        return gridSelectWidget
+    
     #Returns array of necessary dropdown fields for configuring 3x3 display space
     def getGridSelectFields(self):
         folders = ['--', 'snaps', 'snaps2', 'snaps3', 'snaps4', 'snaps5', 'snaps6', 'snaps7', 'snaps8', 'snaps9']
-        fieldList = []
+        fieldBoxList = []
         for i in range(9): 
             field = QComboBox()
             field.addItems(folders)
-            field.setCurrentIndex(i+1)
-            fieldList.append(field)
-        return fieldList
+            field.currentIndexChanged.connect(partial(self.imageSelectFieldChanged, pos=i))
+            setRoiWidget = QWidget()
+            setRoiLayout = QHBoxLayout()
+            setRoiLayout.addWidget(QLabel("Highlight ROI: "))
+            checkBox = QCheckBox()
+            setRoiLayout.addWidget(checkBox)
+            setRoiWidget.setLayout(setRoiLayout)
+            fieldBoxLayout = QVBoxLayout()
+            fieldBoxLayout.addWidget(field)
+            fieldBoxLayout.addWidget(setRoiWidget)
+            setRoiWidget.hide()
+            fieldBoxList.append(fieldBoxLayout)
+        return fieldBoxList
     
     #Initialize the interface for inputting dataset parameters
     def initParamInterface(self):
@@ -376,7 +408,6 @@ class MainWindow(QMainWindow):
         for detect in self.detections:
             self.stateArrays.append(StateArray.from_detections(detect, **self.settings))
         self.dataset = StateArrayDataset.from_kwargs(pd.DataFrame(self.paths), path_col = 'filepath', condition_col = 'condition', **self.settings)
-        self.pictureList = [x.currentText() for x in self.gridSelectFields]
         self.initGUI()
         
     #Locates and reassigns corresponding masked files for each given file
@@ -384,7 +415,7 @@ class MainWindow(QMainWindow):
         for i in range(len(self.fileNames)):
             self.fileNames[i] = path.join(folder, path.split(self.fileNames[i])[1])
         
-    #Initializes analysis and preloads all necessary information to run the GUI
+    #Initializes analysis and preloads all necessary information to run the GUI, before entering image select screen
     def initGUI(self):    
         self.mpo = []
         self.stats = []
@@ -412,15 +443,49 @@ class MainWindow(QMainWindow):
             self.stats.append(Stats(self.mpo[i], self.dataset, self.targetFolder, self.getFileNum(self.shortNames)[i], self.rois, processedStats.loc[processedStats['filepath'] == self.fileNames[i]]))
         self.paramConf.setText("Dataset Initialized")
         self.paramConf.repaint()
+        
+        
+        self.layout.replaceWidget(self.fileWidget, self.gridSelectWidget)
+        self.fileWidget.hide()
+        self.paramWidget.hide()
+        self.gridSelectWidget.show()
+        for i in range(9):
+            self.gridSelectFieldBoxes[i].itemAt(0).widget().setCurrentIndex(i+1)
+
+        
+    #Called upon image in select field 
+    def imageSelectFieldChanged(self, index, pos):
+        print("changed" + str(pos))
+        targetBox = self.gridSelectFieldBoxes[pos]
+        target = targetBox.itemAt(0).widget()
+        roiSet = targetBox.itemAt(1).widget()
+        print(target.currentText())
+        try:
+            image = tifffile.imread(path.join(self.targetFolder, target.currentText(), '1')+'.tif')
+        except:
+            roiSet.hide()
+            return
+        print(str(image.shape))
+        if (image.shape[0] > 200 and image.shape[1] > 200 and self.rois is not None):
+            roiSet.show()
+        else:
+            roiSet.hide()
+            
+        
+        
+    #Loads main GUI following image select config    
+    def loadGUI(self):
+        gridSelectFields = [x.itemAt(0).widget() for x in self.gridSelectFieldBoxes]
+        self.pictureList = [x.currentText() for x in gridSelectFields]
+        self.checkedRois = [x.itemAt(1).widget().layout().itemAt(1).widget().checkState() == Qt.CheckState.Checked for x in self.gridSelectFieldBoxes]
+        self.layout.replaceWidget(self.gridSelectWidget, self.selectWidget)
+        self.gridSelectWidget.hide()
         self.statsWidget.show()
         self.registerImages()
         self.imageWidget.show()
         self.selectBar.addItems(self.shortNames)
-        self.layout.replaceWidget(self.fileWidget, self.selectWidget)
-        self.fileWidget.hide()
-        self.paramWidget.hide()
+        
         self.selectWidget.show()
-        #self.updateDisplay() - redundant, called through selectBar index_changed 
         
         #Statistics Graph
         self.statGraphWidget = self.initStatGraph()
@@ -550,42 +615,38 @@ class MainWindow(QMainWindow):
         targetNum = self.getFileNum(self.shortNames)[self.selectedFile]
         imgSize = 150
         
-        print(self.pictureList)
-        if 'snaps2' in self.pictureList and path.isfile(path.join(self.targetFolder, 'snaps2', targetNum)+'.tif'):
-            cellFig = plt.figure(constrained_layout=True)
-            cellAx = plt.axes()
-            cellFig.add_subplot(cellAx)
-            cellAx.set_yticks([])
-            cellAx.set_xticks([])
-            image = Image.open(path.join(self.targetFolder, "snaps2", targetNum + ".tif"))
-            cellAx.imshow(image)
-            cellAx.add_patch(plt.Rectangle(xy=(self.rois[int(targetNum)-1][0], self.rois[int(targetNum)-1][1]),
-                                          width=self.rois[int(targetNum)-1][2] - self.rois[int(targetNum)-1][0],
-                                          height=self.rois[int(targetNum)-1][3] - self.rois[int(targetNum)-1][1],
-                                          color='r', fill=False))
-            plt.savefig("annotated_cell.svg", dpi=1400, bbox_inches='tight', pad_inches=0)
-            plt.close()
-            cellPictureWithROI = QPixmap()
-            cellPictureWithROI.load("annotated_cell.svg")
-            cellPictureWithROI = cellPictureWithROI.scaled(QSize(imgSize, imgSize), Qt.KeepAspectRatio)
-        
         counter = 0
         for i in range(3):
             for j in range(3):
                 subfolder = self.pictureList[counter]
                 imgPath = path.join(self.targetFolder, subfolder, targetNum)
-                print(imgPath+".tif")
-                print(path.isfile(imgPath+".tif"))
                 if (not subfolder == '--') and path.isfile(imgPath+".tif"):
-                    print("did a " + subfolder)
-                    if subfolder == 'snaps2':
-                        cellPicture = cellPictureWithROI
+                    if self.checkedRois[counter]:
+                        cellPicture = self.getRoiPicture(targetNum, imgPath+".tif")
                     else:
                         cellPicture = QPixmap()
                         cellPicture.load(imgPath)
-                        cellPicture = cellPicture.scaled(QSize(imgSize, imgSize), Qt.KeepAspectRatio)
+                    cellPicture = cellPicture.scaled(QSize(imgSize, imgSize), Qt.KeepAspectRatio)
                     self.cellDisplay[counter].setPixmap(cellPicture)
                 counter += 1
+                
+    def getRoiPicture(self, targetNum, imgPath):
+        cellFig = plt.figure(constrained_layout=True)
+        cellAx = plt.axes()
+        cellFig.add_subplot(cellAx)
+        cellAx.set_yticks([])
+        cellAx.set_xticks([])
+        image = Image.open(imgPath)
+        cellAx.imshow(image)
+        cellAx.add_patch(plt.Rectangle(xy=(self.rois[int(targetNum)-1][0], self.rois[int(targetNum)-1][1]),
+                                      width=self.rois[int(targetNum)-1][2] - self.rois[int(targetNum)-1][0],
+                                      height=self.rois[int(targetNum)-1][3] - self.rois[int(targetNum)-1][1],
+                                      color='r', fill=False))
+        plt.savefig("annotated_cell.svg", dpi=1400, bbox_inches='tight', pad_inches=0)
+        plt.close()
+        cellPictureWithROI = QPixmap()
+        cellPictureWithROI.load("annotated_cell.svg")
+        return cellPictureWithROI
     
     #Updates display based on selected image
     def updateDisplay(self):
