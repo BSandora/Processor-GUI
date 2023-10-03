@@ -455,17 +455,14 @@ class MainWindow(QMainWindow):
         
     #Called upon image in select field 
     def imageSelectFieldChanged(self, index, pos):
-        print("changed" + str(pos))
         targetBox = self.gridSelectFieldBoxes[pos]
         target = targetBox.itemAt(0).widget()
         roiSet = targetBox.itemAt(1).widget()
-        print(target.currentText())
         try:
             image = tifffile.imread(path.join(self.targetFolder, target.currentText(), '1')+'.tif')
         except:
             roiSet.hide()
             return
-        print(str(image.shape))
         if (image.shape[0] > 200 and image.shape[1] > 200 and self.rois is not None):
             roiSet.show()
         else:
@@ -653,12 +650,11 @@ class MainWindow(QMainWindow):
         self.invalidNumber = False
         try:
             self.setPicture()
-        except Exception as e:
+        except:
             self.cellDisplay[0].setText("Images Not Present or Inaccessible")
             self.cellDisplay[1].clear()
             self.cellDisplay[2].clear()
             self.invalidNumber = True
-            print("An exception occurred:", e)
         self.graphDiffusionSpectrum()
         graph = QPixmap()
         graph.load("diffusion_spectrum.png")
